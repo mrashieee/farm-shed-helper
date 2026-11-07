@@ -1,60 +1,39 @@
-# SHN-MEDIAPIPE
+# Nira
 ![Project Cover](assets/cover.jpeg)
-#  [Your Project Name]
 
 ### 💡 What's the idea?
-[Tell us what you built and what it does. Keep it short!]
+Touchless vegetable checker for small vendors and kitchens. Point webcam at vegetables, get live ripeness and freshness score with Grade A / B / Reject badge. Control it with hand gestures — built for dirty mandis and kitchens. 100% on-device, works with no internet.
 
 ### 🌐 Check it out!
-- **Live Website:** [Drop your link here / N/A]
-- **GitHub Repo:** [Drop your repository link here]
+- **Live Website:** N/A
+- **GitHub Repo:** https://github.com/mrashieee/nira
 
 ### 🛠️ What did you use?
-[Tech stack, tools, frameworks, libraries, etc.]
+- Python 3.11 + `uv` (`uv run`)
+- OpenCV 5.0 (`opencv-python`), NumPy
+- MediaPipe 1.2.2 Tasks API — `HandLandmarker` (`hand_landmarker.task`)
+- HSV color masks + contour area for grading
 
 ### 👥 The Humans Behind It
-- [Name – GitHub Username]
-- [Name – GitHub Username]
+- Muhammad Rashid K – mrashieee
 
 ### ⚙️ Hardware Corner
-[What hardware did you use? / N/A]
+- Laptop webcam (no webcam in container, tested via image/file mode)
+- White paper for one-click color calibration, optional desk lamp lightbox
 
 ### 📸 Show Us What You Built!
 [Add screenshots, photos, GIFs or demo video links here.]
 
 ### ✨ Cool Things It Does
-- [Feature 1]
-- [Feature 2]
-- [Feature 3]
+- Live ripeness + freshness % with HSV color ratios (lighting-stable)
+- `c` to calibrate, hand gestures to control + save to CSV log
+- Hand-as-scale for size estimate + fully touchless UI
+- Honest limitation: controlled light prototype, HSV presets not lab-grade
 
----
-
-**Built with curiosity at Saturday Hack Night 💜**# 🚀 [Your Project Name]
-
-### 💡 What's the idea?
-[Tell us what you built and what it does. Keep it short!]
-
-### 🌐 Check it out!
-- **Live Website:** [Drop your link here / N/A]
-- **GitHub Repo:** [Drop your repository link here]
-
-### 🛠️ What did you use?
-[Tech stack, tools, frameworks, libraries, etc.]
-
-### 👥 The Humans Behind It
-- [Name – GitHub Username]
-- [Name – GitHub Username]
-
-### ⚙️ Hardware Corner
-[What hardware did you use? / N/A]
-
-### 📸 Show Us What You Built!
-[Add screenshots, photos, GIFs or demo video links here.]
-
-### ✨ Cool Things It Does
-- [Feature 1]
-- [Feature 2]
-- [Feature 3]
+### ▶️ Run it
+```bash
+uv run python app.py
+```
 
 ---
 
