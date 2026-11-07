@@ -198,9 +198,17 @@ class Board:
         elif bid == "door":
             self.door = not self.door
         elif bid == "open":
+            if self.door:
+                return "OPENED ALREADY"
             self.door = True
+            self.log("door_open")
+            return "DOOR OPEN"
         elif bid == "close":
+            if not self.door:
+                return "CLOSED ALREADY"
             self.door = False
+            self.log("door_close")
+            return "DOOR CLOSED"
         elif bid == "alarm":
             self.alarm = not self.alarm
         elif bid == "count":
@@ -217,10 +225,6 @@ class Board:
         self.log(bid)
         if bid in ("m10", "m1", "p1", "p10", "count"):
             return f"COUNT {self.count}"
-        if bid == "open":
-            return "DOOR OPEN"
-        if bid == "close":
-            return "DOOR CLOSED"
         return f"{bid.upper()} {'ON' if getattr(self, bid, None) is True else ''}".strip()
 
     def log(self, what):
@@ -266,7 +270,8 @@ def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
         cv2.addWeighted(overlay, 0.45, frame, 0.55, 0, frame)
         for (bid, label, (x0, y0, x1, y1)) in buttons:
             X0, Y0, X1, Y1 = int(x0), int(y0), int(x1), int(y1)  # already pixels
-            on = board.__dict__.get(bid) is True or (bid == "freeze" and board.frozen)
+            on = (board.__dict__.get(bid) is True or (bid == "freeze" and board.frozen)
+                  or (bid == "open" and board.door) or (bid == "close" and not board.door))
             hot = dwell is not None and dwell.cur == bid
             col = (0, 255, 0) if on else ((0, 255, 255) if hot else (255, 255, 255))
             cv2.rectangle(frame, (X0, Y0), (X1, Y1), col, 2)
@@ -378,6 +383,12 @@ def selftest():
     b2 = Board()
     assert b2.toggle("freeze") == "FROZEN" and b2.frozen
     assert b2.toggle("freeze") == "RESUMED" and not b2.frozen
+    b3 = Board()
+    assert b3.toggle("close") == "CLOSED ALREADY" and not b3.door
+    assert b3.toggle("open") == "DOOR OPEN" and b3.door
+    assert b3.toggle("open") == "OPENED ALREADY" and b3.door
+    assert b3.toggle("close") == "DOOR CLOSED" and not b3.door
+    assert b3.toggle("close") == "CLOSED ALREADY" and not b3.door
     db3 = DwellButton()
     t2 = time.time()
     db3.update((200, 200), box, now=t2)
