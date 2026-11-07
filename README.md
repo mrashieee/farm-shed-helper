@@ -21,7 +21,7 @@ Touchless farm-shed dashboard for muddy/gloved hands. Show palm to lock, point y
 - Laptop webcam. No extra hardware. (Relay/Pi wiring = future.)
 
 ### 📸 Show Us What You Built!
-<video src="assets/Demo.mp4" controls="controls" style="max-width: 100%;">Demo video (2 min, face + app walkthrough). Direct link: <a href="assets/Demo.mp4">assets/Demo.mp4</a></video>
+Demo video (2 min, face + app walkthrough): [assets/Demo.mp4](assets/Demo.mp4) — click to play in GitHub's player.
 
 ### ✨ Cool Things It Does
 - Palm lock-in (3 frames to lock, 5 to drop) — flicker never triggers
