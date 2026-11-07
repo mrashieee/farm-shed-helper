@@ -1,11 +1,16 @@
 """Nira Shed Helper - touchless dashboard. No pose classification, no PC keys.
 Presence lock (hand exists = cursor on) + index fingertip drives everything:
-  boxes (dwell 0.6s to toggle) + slider (tip x sets value) + counter.
+  boxes (dwell 0.6s to toggle) + slider (tip x sets value).
 uv run python shed.py [--test]
 """
 import argparse
+import os
 import sys
 import time
+
+os.environ.setdefault("QT_QPA_PLATFORM", "xcb")  # silence wayland + dejavu font nag
+os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "0")
+
 import cv2
 import numpy as np
 
