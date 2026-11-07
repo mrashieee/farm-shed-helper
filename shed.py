@@ -161,7 +161,9 @@ class Slider:
 
 
 class CursorSmoother:
-    """Smooth helper: EMA on fingertip so cursor doesn't shake."""
+    """Smooth helper: EMA on fingertip + teleport guard (ghosts pop far away)."""
+
+    JUMP_PX = 250.0
 
     def __init__(self, alpha=0.5):
         self.alpha = alpha
@@ -171,6 +173,9 @@ class CursorSmoother:
         if self.p is None:
             self.p = (float(tip[0]), float(tip[1]))
         else:
+            jump = ((tip[0] - self.p[0]) ** 2 + (tip[1] - self.p[1]) ** 2) ** 0.5
+            if jump > self.JUMP_PX:
+                return None  # ghost teleport: ignore this frame
             self.p = (self.p[0] + self.alpha * (tip[0] - self.p[0]),
                       self.p[1] + self.alpha * (tip[1] - self.p[1]))
         return self.p
@@ -371,6 +376,9 @@ def selftest():
     assert p1 == (100.0, 100.0) and 100 < p2[0] < 200, f"smoother halves jump {p2}"
     cs.reset()
     assert cs.update((50, 50)) == (50.0, 50.0)
+    assert cs.update((60, 50)) is not None, "small move tracks"
+    assert cs.update((600, 400)) is None, "250px+ teleport (curtain ghost) dropped"
+    assert cs.update((62, 50)) is not None, "cursor kept last good spot"
     b = Board()
     assert b.toggle("motor") == "MOTOR ON" and b.motor
     assert b.toggle("motor") == "MOTOR" and not b.motor
@@ -489,6 +497,8 @@ def main():
                 for conn in vision.HandLandmarksConnections.HAND_CONNECTIONS:
                     cv2.line(frame, pts[conn.start], pts[conn.end], (0, 255, 0), 2)
                 tip = smooth.update((hand[8].x * w, hand[8].y * h))
+                if tip is None:
+                    continue  # ghost teleport: drop frame, keep last cursor
                 cv2.circle(frame, (int(tip[0]), int(tip[1])), 10, (0, 255, 255), -1)
                 if board.frozen:
                     cv2.putText(frame, "FROZEN - dwell FREEZE to resume", (w // 2 - 300, h // 2),
