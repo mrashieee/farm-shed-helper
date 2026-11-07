@@ -242,6 +242,22 @@ MIN_NORM = (0.02, 0.86, 0.14, 0.93)  # touch = SPEED 0
 MAX_NORM = (0.76, 0.86, 0.93, 0.93)  # touch = SPEED 100
 
 
+def fit_label(frame, txt, box, color, thick=2):
+    """Draw text centered in box, auto-shrunk to fit. Returns scale used."""
+    X0, Y0, X1, Y1 = box
+    bw, bh = max(X1 - X0 - 16, 10), max(Y1 - Y0 - 12, 10)
+    fs = 1.0
+    while fs > 0.3:
+        (tw, th), _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, fs, thick)
+        if tw <= bw and th <= bh:
+            break
+        fs -= 0.1
+    (tw, th), _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, fs, thick)
+    cv2.putText(frame, txt, (X0 + (X1 - X0 - tw) // 2, Y0 + (Y1 - Y0 + th) // 2),
+                cv2.FONT_HERSHEY_SIMPLEX, fs, color, thick)
+    return fs
+
+
 def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
     h, w, _ = frame.shape
     cv2.rectangle(frame, (0, 0), (w, 72), (20, 20, 20), -1)
@@ -273,9 +289,7 @@ def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
                 txt = f"{board.door_name}:{'OPEN' if board.door_open else 'SHUT'}"
             else:
                 txt = label
-            fs = 0.55 if len(txt) <= 3 else 0.7
-            cv2.putText(frame, txt, (X0 + 6, Y0 + 24),
-                        cv2.FONT_HERSHEY_SIMPLEX, fs, (0, 255, 255), 2)
+            fit_label(frame, txt, (X0, Y0, X1, Y1 - 12), (0, 255, 255))
             if hot and dwell is not None:
                 p = min(1.0, dwell.progress())
                 cv2.rectangle(frame, (X0, Y1 - 10), (int(X0 + (X1 - X0) * p), Y1 - 4), (0, 255, 0), -1)
@@ -296,8 +310,7 @@ def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
             BX0, BY0, BX1, BY1 = int(rx[0] * w), int(rx[1] * h), int(rx[2] * w), int(rx[3] * h)
             cv2.rectangle(frame, (BX0, BY0), (BX1, BY1), (40, 40, 40), -1)
             cv2.rectangle(frame, (BX0, BY0), (BX1, BY1), (255, 150, 0), 2)
-            cv2.putText(frame, label, (BX0 + 10, (BY0 + BY1) // 2 + 8),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 150, 0), 2)
+            fit_label(frame, label, (BX0, BY0, BX1, BY1), (255, 150, 0))
     return frame
 
 
