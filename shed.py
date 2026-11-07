@@ -92,6 +92,7 @@ class PresenceLock:
 
 class DwellButton:
     DWELL_S = 0.6
+    DWELL_MAP = {"reset": 1.2, "freeze": 0.8}  # dangerous boxes need longer hold
     REFIRE_S = 2.0  # same box can't refire within 2s (edge-jitter spam)
 
     def __init__(self):
@@ -99,6 +100,7 @@ class DwellButton:
         self.enter = 0.0
         self.armed = True
         self.cool = {}
+        self.need = self.DWELL_S
 
     def update(self, tip, buttons_px, now=None):
         now = time.time() if now is None else now
@@ -109,12 +111,13 @@ class DwellButton:
                 break
         if hit != self.cur:
             self.cur, self.enter, self.armed = hit, now, True
+            self.need = self.DWELL_MAP.get(hit, self.DWELL_S)
             return None
         if hit is None or not self.armed:
             return None
         if now < self.cool.get(hit, 0):
             return None
-        if now - self.enter >= self.DWELL_S:
+        if now - self.enter >= self.need:
             self.armed = False
             self.cool[hit] = now + self.REFIRE_S
             return hit
@@ -124,7 +127,7 @@ class DwellButton:
         now = time.time() if now is None else now
         if self.cur is None:
             return 0.0
-        return (now - self.enter) / self.DWELL_S
+        return (now - self.enter) / self.need
 
     def reset(self):
         self.cur, self.armed = None, True
@@ -183,6 +186,7 @@ class Board:
         self.light = False
         self.door = False
         self.alarm = False
+        self.frozen = False
         self.count = 0
         self.speed = 0.0
 
@@ -206,6 +210,10 @@ class Board:
         elif bid == "reset":
             self.__init__()
             return "RESET"
+        elif bid == "freeze":
+            self.frozen = not self.frozen
+            self.log("freeze" if self.frozen else "resume")
+            return "FROZEN" if self.frozen else "RESUMED"
         self.log(bid)
         if bid in ("m10", "m1", "p1", "p10", "count"):
             return f"COUNT {self.count}"
@@ -223,17 +231,18 @@ class Board:
 
 
 BUTTONS = [
-    ("motor", "MOTOR", (0.05, 0.16, 0.30, 0.24)),
-    ("light", "LIGHT", (0.35, 0.16, 0.60, 0.24)),
-    ("door", "DOOR", (0.65, 0.16, 0.90, 0.24)),
-    ("alarm", "ALARM", (0.05, 0.26, 0.30, 0.34)),
-    ("open", "OPEN", (0.35, 0.26, 0.60, 0.34)),
-    ("close", "CLOSE", (0.65, 0.26, 0.90, 0.34)),
-    ("m10", "-10", (0.02, 0.36, 0.18, 0.43)),
-    ("m1", "-1", (0.20, 0.36, 0.36, 0.43)),
-    ("reset", "RESET", (0.38, 0.36, 0.54, 0.43)),
-    ("p1", "+1", (0.56, 0.36, 0.72, 0.43)),
-    ("p10", "+10", (0.74, 0.36, 0.94, 0.43)),
+    ("motor", "MOTOR", (0.02, 0.13, 0.24, 0.20)),
+    ("light", "LIGHT", (0.26, 0.13, 0.48, 0.20)),
+    ("door", "DOOR", (0.50, 0.13, 0.72, 0.20)),
+    ("freeze", "FREEZE", (0.74, 0.13, 0.95, 0.20)),
+    ("alarm", "ALARM", (0.02, 0.22, 0.30, 0.29)),
+    ("open", "OPEN", (0.35, 0.22, 0.60, 0.29)),
+    ("close", "CLOSE", (0.65, 0.22, 0.93, 0.29)),
+    ("m10", "-10", (0.02, 0.31, 0.18, 0.38)),
+    ("m1", "-1", (0.20, 0.31, 0.36, 0.38)),
+    ("reset", "RESET", (0.38, 0.31, 0.54, 0.38)),
+    ("p1", "+1", (0.56, 0.31, 0.72, 0.38)),
+    ("p10", "+10", (0.74, 0.31, 0.94, 0.38)),
 ]
 SLIDER_NORM = (0.16, 0.86, 0.74, 0.93)  # SPEED strip (room for 0/100 sides)
 MIN_NORM = (0.02, 0.86, 0.14, 0.93)  # touch = SPEED 0
@@ -243,11 +252,11 @@ MAX_NORM = (0.76, 0.86, 0.93, 0.93)  # touch = SPEED 100
 def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
     h, w, _ = frame.shape
     cv2.rectangle(frame, (0, 0), (w, 72), (20, 20, 20), -1)
-    cv2.putText(frame, f"{'LOCKED' if lock else 'SHOW PALM'}  "
+    cv2.putText(frame, f"{'FROZEN' if board.frozen else ('LOCKED' if lock else 'SHOW PALM')}  "
                        f"M:{int(board.motor)} L:{int(board.light)} D:{int(board.door)} "
                        f"A:{int(board.alarm)} N:{board.count} SPD:{board.speed:.0f}",
-                (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0) if lock else (0, 165, 255), 2)
-    cv2.putText(frame, "dwell box 0.6s | slider follows tip | q=quit",
+                (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 255) if board.frozen else ((0, 255, 0) if lock else (0, 165, 255)), 2)
+    cv2.putText(frame, "dwell box | FREEZE to lock input | slider follows tip | q=quit",
                 (10, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
     if buttons:
         overlay = frame.copy()
@@ -257,7 +266,7 @@ def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
         cv2.addWeighted(overlay, 0.45, frame, 0.55, 0, frame)
         for (bid, label, (x0, y0, x1, y1)) in buttons:
             X0, Y0, X1, Y1 = int(x0), int(y0), int(x1), int(y1)  # already pixels
-            on = board.__dict__.get(bid) is True
+            on = board.__dict__.get(bid) is True or (bid == "freeze" and board.frozen)
             hot = dwell is not None and dwell.cur == bid
             col = (0, 255, 0) if on else ((0, 255, 255) if hot else (255, 255, 255))
             cv2.rectangle(frame, (X0, Y0), (X1, Y1), col, 2)
@@ -366,6 +375,16 @@ def selftest():
     for _ in range(20):
         assert fp2.update(True, index_up=True) is None, "pointing never freezes"
     assert not fp2.paused
+    b2 = Board()
+    assert b2.toggle("freeze") == "FROZEN" and b2.frozen
+    assert b2.toggle("freeze") == "RESUMED" and not b2.frozen
+    db3 = DwellButton()
+    t2 = time.time()
+    db3.update((200, 200), box, now=t2)
+    box_r = [("reset", "RESET", (100, 100, 300, 300))]
+    db3.update((200, 200), box_r, now=t2)
+    assert db3.update((200, 200), box_r, now=t2 + 0.7) is None, "reset needs 1.2s hold"
+    assert db3.update((200, 200), box_r, now=t2 + 1.3) == "reset"
     print("boxes self-test passed: presence/dwell/slider/toggles/fistpause")
 
 
@@ -405,7 +424,7 @@ def main():
         print(f"camera {args.cam} running at {pw}x{ph}")
     else:
         print(f"camera {args.cam} opened but no frames (try --cam 2)")
-    board, lock, dwell, slider, smooth, fp = Board(), PresenceLock(), DwellButton(), Slider(), CursorSmoother(), FistPause()
+    board, lock, dwell, slider, smooth = Board(), PresenceLock(), DwellButton(), Slider(), CursorSmoother()
     print("farm-shed-helper. SHOW PALM to lock, point fingertip at boxes, slider follows tip. q=quit")
     cv2.namedWindow("farm-shed-helper (q quit)", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("farm-shed-helper (q quit)", 1280, 720)
@@ -442,25 +461,15 @@ def main():
                 pts = [(int(p.x * w), int(p.y * h)) for p in hand]
                 for conn in vision.HandLandmarksConnections.HAND_CONNECTIONS:
                     cv2.line(frame, pts[conn.start], pts[conn.end], (0, 255, 0), 2)
-                fist_now = is_fist(hand)
-                index_up = hand[8].y < hand[6].y
-                fp_msg = fp.update(fist_now, index_up)
-                if fp_msg == "paused":
-                    msg, dwell_keep = "FROZEN - open hand to resume", True
-                    dwell.reset()
-                elif fp_msg == "resumed":
-                    msg, dwell_keep = "RESUMED", True
-                elif fp.paused:
-                    msg, dwell_keep = None, True  # frozen: ignore everything
-                else:
-                    dwell_keep = False
                 tip = smooth.update((hand[8].x * w, hand[8].y * h))
-                if not fp.paused:
-                    cv2.circle(frame, (int(tip[0]), int(tip[1])), 10, (0, 255, 255), -1)
-                else:
-                    cv2.putText(frame, "FROZEN - hold FIST to resume", (w // 2 - 260, h // 2),
+                cv2.circle(frame, (int(tip[0]), int(tip[1])), 10, (0, 255, 255), -1)
+                if board.frozen:
+                    cv2.putText(frame, "FROZEN - dwell FREEZE to resume", (w // 2 - 300, h // 2),
                                 cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
-                if locked and not fp.paused and not dwell_keep and not fist_now:
+                    fired = dwell.update(tip, bpx)
+                    if fired == "freeze":
+                        msg = board.toggle("freeze")
+                elif locked:
                     mx0, my0, mx1, my1 = minrect
                     gx0, gy0, gx1, gy1 = maxrect
                     if mx0 <= tip[0] <= mx1 and my0 <= tip[1] <= my1:
@@ -483,7 +492,6 @@ def main():
             else:
                 dwell.reset()
                 smooth.reset()
-                fp.reset()
             if msg:
                 print(msg, flush=True)
             cv2.imshow("farm-shed-helper (q quit)", draw(frame, board, locked, bpx, dwell, SLIDER_NORM))
