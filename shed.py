@@ -237,9 +237,9 @@ BUTTONS = [
     ("sprinkler", "SPRINKLER", (0.74, 0.22, 0.95, 0.29)),
 ]
 DOORS = ["MAIN", "KITCHEN", "SHED"]
-SLIDER_NORM = (0.16, 0.86, 0.74, 0.93)  # SPEED strip (room for 0/100 sides)
-MIN_NORM = (0.02, 0.86, 0.14, 0.93)  # touch = SPEED 0
-MAX_NORM = (0.76, 0.86, 0.93, 0.93)  # touch = SPEED 100
+SLIDER_NORM = (0.16, 0.86, 0.74, 0.93)  # SPRINKLER SPEED strip (room for 0/100 sides)
+MIN_NORM = (0.02, 0.86, 0.14, 0.93)  # touch = sprinkler 0
+MAX_NORM = (0.76, 0.86, 0.93, 0.93)  # touch = sprinkler 100
 
 
 def fit_label(frame, txt, box, color, thick=2, floor=0.6):
@@ -305,7 +305,7 @@ def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
         for t in (0, 25, 50, 75, 100):
             tx = int(X0 + (X1 - X0) * t / 100.0)
             cv2.line(frame, (tx, Y1 - 2), (tx, Y1 + 5), (160, 160, 160), 1)
-        cv2.putText(frame, f"SPEED {board.speed:.0f}", (X0, Y0 - 10),
+        cv2.putText(frame, f"SPRINKLER SPEED {board.speed:.0f}", (X0, Y0 - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 150, 0), 2)
         for (rx, label) in ((MIN_NORM, "0"), (MAX_NORM, "100")):
             BX0, BY0, BX1, BY1 = int(rx[0] * w), int(rx[1] * h), int(rx[2] * w), int(rx[3] * h)
@@ -502,11 +502,11 @@ def main():
                     if mx0 <= tip[0] <= mx1 and my0 <= tip[1] <= my1:
                         if board.speed != 0:
                             board.speed = slider.set(0)
-                            msg = "SPEED 0"
+                            msg = "SPRINKLER SPEED 0"
                     elif gx0 <= tip[0] <= gx1 and gy0 <= tip[1] <= gy1:
                         if board.speed != 100:
                             board.speed = slider.set(100)
-                            msg = "SPEED 100"
+                            msg = "SPRINKLER SPEED 100"
                     else:
                         v = slider.update(tip, srect)
                         if v is not None:
