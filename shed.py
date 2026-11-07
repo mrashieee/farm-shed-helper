@@ -41,17 +41,18 @@ def pinch_px(lms, w, h):
 
 
 class FistPause:
-    """Fist = kill-switch. Hold fist ~8 frames to freeze/unfreeze everything."""
+    """Fist = kill-switch. Hold fist ~12 frames to freeze/unfreeze everything.
+    Pointing (index up) never counts, so normal use can't trip it."""
 
-    NEED = 8
+    NEED = 12
 
     def __init__(self):
         self.n = 0
         self.paused = False
         self.armed = True
 
-    def update(self, is_fist):
-        if not is_fist:
+    def update(self, is_fist, index_up=False):
+        if not is_fist or index_up:
             self.n = 0
             self.armed = True
             return None
@@ -353,14 +354,18 @@ def selftest():
     assert b.toggle("m1") == "COUNT 9" and b.count == 9
     assert b.toggle("m10") == "COUNT 0" and b.count == 0, "clamp at zero"
     fp = FistPause()
-    for _ in range(7):
-        assert fp.update(True) is None, "needs 8 steady fist frames"
+    for _ in range(11):
+        assert fp.update(True) is None, "needs 12 steady fist frames"
     assert fp.update(True) == "paused" and fp.paused
     assert fp.update(True) is None, "holding fist doesn't re-toggle"
     assert fp.update(False) is None, "release re-arms"
-    for _ in range(7):
+    for _ in range(11):
         assert fp.update(True) is None
     assert fp.update(True) == "resumed" and not fp.paused
+    fp2 = FistPause()
+    for _ in range(20):
+        assert fp2.update(True, index_up=True) is None, "pointing never freezes"
+    assert not fp2.paused
     print("boxes self-test passed: presence/dwell/slider/toggles/fistpause")
 
 
@@ -438,7 +443,8 @@ def main():
                 for conn in vision.HandLandmarksConnections.HAND_CONNECTIONS:
                     cv2.line(frame, pts[conn.start], pts[conn.end], (0, 255, 0), 2)
                 fist_now = is_fist(hand)
-                fp_msg = fp.update(fist_now)
+                index_up = hand[8].y < hand[6].y
+                fp_msg = fp.update(fist_now, index_up)
                 if fp_msg == "paused":
                     msg, dwell_keep = "FROZEN - open hand to resume", True
                     dwell.reset()
