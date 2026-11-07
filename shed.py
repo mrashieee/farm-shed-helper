@@ -190,32 +190,32 @@ class Board:
 
 
 BUTTONS = [
-    ("motor", "MOTOR", (0.05, 0.22, 0.30, 0.34)),
-    ("light", "LIGHT", (0.35, 0.22, 0.60, 0.34)),
-    ("door", "DOOR", (0.65, 0.22, 0.90, 0.34)),
-    ("alarm", "ALARM", (0.05, 0.37, 0.30, 0.49)),
-    ("open", "OPEN", (0.35, 0.37, 0.60, 0.49)),
-    ("close", "CLOSE", (0.65, 0.37, 0.90, 0.49)),
-    ("m10", "-10", (0.02, 0.52, 0.18, 0.62)),
-    ("m1", "-1", (0.20, 0.52, 0.36, 0.62)),
-    ("reset", "RESET", (0.38, 0.52, 0.54, 0.62)),
-    ("p1", "+1", (0.56, 0.52, 0.72, 0.62)),
-    ("p10", "+10", (0.74, 0.52, 0.94, 0.62)),
+    ("motor", "MOTOR", (0.05, 0.16, 0.30, 0.24)),
+    ("light", "LIGHT", (0.35, 0.16, 0.60, 0.24)),
+    ("door", "DOOR", (0.65, 0.16, 0.90, 0.24)),
+    ("alarm", "ALARM", (0.05, 0.26, 0.30, 0.34)),
+    ("open", "OPEN", (0.35, 0.26, 0.60, 0.34)),
+    ("close", "CLOSE", (0.65, 0.26, 0.90, 0.34)),
+    ("m10", "-10", (0.02, 0.36, 0.18, 0.43)),
+    ("m1", "-1", (0.20, 0.36, 0.36, 0.43)),
+    ("reset", "RESET", (0.38, 0.36, 0.54, 0.43)),
+    ("p1", "+1", (0.56, 0.36, 0.72, 0.43)),
+    ("p10", "+10", (0.74, 0.36, 0.94, 0.43)),
 ]
-SLIDER_NORM = (0.16, 0.78, 0.74, 0.90)  # SPEED strip (room for 0/100 sides)
-MIN_NORM = (0.02, 0.78, 0.14, 0.90)  # touch = SPEED 0
-MAX_NORM = (0.76, 0.78, 0.93, 0.90)  # touch = SPEED 100
+SLIDER_NORM = (0.16, 0.86, 0.74, 0.93)  # SPEED strip (room for 0/100 sides)
+MIN_NORM = (0.02, 0.86, 0.14, 0.93)  # touch = SPEED 0
+MAX_NORM = (0.76, 0.86, 0.93, 0.93)  # touch = SPEED 100
 
 
 def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
     h, w, _ = frame.shape
-    cv2.rectangle(frame, (0, 0), (w, 100), (20, 20, 20), -1)
-    cv2.putText(frame, f"{'LOCKED - point fingertip' if lock else 'SHOW PALM TO LOCK'}  "
+    cv2.rectangle(frame, (0, 0), (w, 72), (20, 20, 20), -1)
+    cv2.putText(frame, f"{'LOCKED' if lock else 'SHOW PALM'}  "
                        f"M:{int(board.motor)} L:{int(board.light)} D:{int(board.door)} "
                        f"A:{int(board.alarm)} N:{board.count} SPD:{board.speed:.0f}",
-                (12, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0) if lock else (0, 165, 255), 2)
-    cv2.putText(frame, "dwell 0.6s on box | slider follows fingertip | q=quit",
-                (12, 68), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
+                (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0) if lock else (0, 165, 255), 2)
+    cv2.putText(frame, "dwell box 0.6s | slider follows tip | q=quit",
+                (10, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
     if buttons:
         overlay = frame.copy()
         for (bid, label, (x0, y0, x1, y1)) in buttons:
@@ -227,9 +227,9 @@ def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
             on = board.__dict__.get(bid) is True
             hot = dwell is not None and dwell.cur == bid
             col = (0, 255, 0) if on else ((0, 255, 255) if hot else (255, 255, 255))
-            cv2.rectangle(frame, (X0, Y0), (X1, Y1), col, 3)
-            fs = 0.7 if len(label) <= 3 else 0.9
-            cv2.putText(frame, f"{label} {'ON' if on else ''}", (X0 + 8, Y0 + 34),
+            cv2.rectangle(frame, (X0, Y0), (X1, Y1), col, 2)
+            fs = 0.55 if len(label) <= 3 else 0.7
+            cv2.putText(frame, f"{label} {'ON' if on else ''}", (X0 + 6, Y0 + 24),
                         cv2.FONT_HERSHEY_SIMPLEX, fs, (0, 255, 255), 2)
             if hot and dwell is not None:
                 p = min(1.0, dwell.progress())
@@ -332,6 +332,8 @@ def main():
         running_mode=vision.RunningMode.VIDEO, num_hands=1,
         min_hand_detection_confidence=0.4, min_hand_presence_confidence=0.4)
     cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
     if not cap.isOpened():
         sys.exit("No webcam. Try: uv run python shed.py --test")
     board, lock, dwell, slider, smooth = Board(), PresenceLock(), DwellButton(), Slider(), CursorSmoother()
@@ -385,6 +387,7 @@ def main():
                 smooth.reset()
             if msg:
                 print(msg, flush=True)
+            cv2.namedWindow("farm-shed-helper (q quit)", cv2.WINDOW_NORMAL)
             cv2.imshow("farm-shed-helper (q quit)", draw(frame, board, locked, bpx, dwell, SLIDER_NORM))
             if cv2.waitKey(5) & 0xFF == ord("q"):
                 break
