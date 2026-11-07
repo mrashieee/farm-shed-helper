@@ -318,6 +318,8 @@ def selftest():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--test", action="store_true")
+    ap.add_argument("--cam", type=int, default=0, help="camera index (try 1 if 0 glitches)")
+    ap.add_argument("--skip", type=int, default=2, help="detect every Nth frame (perf)")
     args = ap.parse_args()
     if args.test:
         selftest()
@@ -331,13 +333,17 @@ def main():
         base_options=BaseOptions(model_asset_path=MODEL),
         running_mode=vision.RunningMode.VIDEO, num_hands=1,
         min_hand_detection_confidence=0.4, min_hand_presence_confidence=0.4)
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(args.cam)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    cap.set(cv2.CAP_PROP_FPS, 30)
     if not cap.isOpened():
-        sys.exit("No webcam. Try: uv run python shed.py --test")
+        sys.exit(f"No webcam {args.cam}. Try: uv run python shed.py --cam 1")
     board, lock, dwell, slider, smooth = Board(), PresenceLock(), DwellButton(), Slider(), CursorSmoother()
     print("farm-shed-helper. SHOW PALM to lock, point fingertip at boxes, slider follows tip. q=quit")
+    cv2.namedWindow("farm-shed-helper (q quit)", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("farm-shed-helper (q quit)", 1280, 720)
+    frame_no, cached, fps, t_prev = 0, None, 0.0, time.time()
     with vision.HandLandmarker.create_from_options(opts) as lm:
         while cap.isOpened():
             ok, frame = cap.read()
@@ -345,9 +351,17 @@ def main():
                 continue
             frame = cv2.flip(frame, 1)
             h, w, _ = frame.shape
-            mp_img = mp.Image(image_format=mp.ImageFormat.SRGB,
-                              data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            res = lm.detect_for_video(mp_img, int(time.time() * 1000))
+            frame_no += 1
+            now = time.time()
+            fps += 0.2 * (1.0 / max(now - t_prev, 1e-3) - fps)
+            t_prev = now
+            if frame_no % max(args.skip, 1) == 1 or cached is None:
+                mp_img = mp.Image(image_format=mp.ImageFormat.SRGB,
+                                  data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                cached = lm.detect_for_video(mp_img, int(now * 1000))
+            res = cached
+            cv2.putText(frame, f"{fps:.0f}fps cam{args.cam}", (w - 170, 24),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
             hands = res.hand_landmarks or []
             locked = lock.update(bool(hands))
             msg = None
@@ -387,7 +401,6 @@ def main():
                 smooth.reset()
             if msg:
                 print(msg, flush=True)
-            cv2.namedWindow("farm-shed-helper (q quit)", cv2.WINDOW_NORMAL)
             cv2.imshow("farm-shed-helper (q quit)", draw(frame, board, locked, bpx, dwell, SLIDER_NORM))
             if cv2.waitKey(5) & 0xFF == ord("q"):
                 break
