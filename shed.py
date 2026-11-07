@@ -217,14 +217,20 @@ def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
     cv2.putText(frame, "dwell 0.6s on box | slider follows fingertip | q=quit",
                 (12, 68), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
     if buttons:
+        overlay = frame.copy()
         for (bid, label, (x0, y0, x1, y1)) in buttons:
-            X0, Y0, X1, Y1 = int(x0 * w), int(y0 * h), int(x1 * w), int(y1 * h)
+            X0, Y0, X1, Y1 = int(x0), int(y0), int(x1), int(y1)  # already pixels
+            cv2.rectangle(overlay, (X0, Y0), (X1, Y1), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.45, frame, 0.55, 0, frame)
+        for (bid, label, (x0, y0, x1, y1)) in buttons:
+            X0, Y0, X1, Y1 = int(x0), int(y0), int(x1), int(y1)  # already pixels
             on = board.__dict__.get(bid) is True
             hot = dwell is not None and dwell.cur == bid
-            col = (0, 255, 0) if on else ((0, 255, 255) if hot else (90, 90, 90))
-            cv2.rectangle(frame, (X0, Y0), (X1, Y1), col, 3 if (hot or on) else 2)
-            cv2.putText(frame, f"{label} {'ON' if on else ''}", (X0 + 10, Y0 + 40),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, col, 2)
+            col = (0, 255, 0) if on else ((0, 255, 255) if hot else (255, 255, 255))
+            cv2.rectangle(frame, (X0, Y0), (X1, Y1), col, 3)
+            fs = 0.7 if len(label) <= 3 else 0.9
+            cv2.putText(frame, f"{label} {'ON' if on else ''}", (X0 + 8, Y0 + 34),
+                        cv2.FONT_HERSHEY_SIMPLEX, fs, (0, 255, 255), 2)
             if hot and dwell is not None:
                 p = min(1.0, dwell.progress())
                 cv2.rectangle(frame, (X0, Y1 - 10), (int(X0 + (X1 - X0) * p), Y1 - 4), (0, 255, 0), -1)
