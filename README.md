@@ -25,7 +25,8 @@ Touchless farm-shed dashboard for muddy/gloved hands. Show palm to lock, point y
 
 ### ✨ Cool Things It Does
 - Palm lock-in (3 frames to lock, 5 to drop) — flicker never triggers
-- 6 dwell boxes (0.6s) + SPEED slider that follows your fingertip
+- Boxes: MOTOR / LIGHT / DOOR / ALARM / OPEN / CLOSE, counter -10 -1 RESET +1 +10
+- SPEED slider with 0 / 100 side buttons
 - Every toggle logged to `shed_log.csv`
 - No cloud, works offline in the shed
 

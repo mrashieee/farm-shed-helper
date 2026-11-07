@@ -98,9 +98,11 @@ class DwellButton:
 
 
 class Slider:
-    """Tip x inside strip sets 0-100 with smoothing. No grab gesture needed."""
+    """Tip x inside strip sets 0-100 with smoothing + end snap. No grab needed."""
 
-    def __init__(self, alpha=0.35):
+    SNAP = 8.0
+
+    def __init__(self, alpha=0.25):
         self.value = 0.0
         self.alpha = alpha
 
@@ -109,8 +111,37 @@ class Slider:
         if not (x0 <= tip[0] <= x1 and y0 <= tip[1] <= y1):
             return None
         target = 100.0 * (tip[0] - x0) / max(x1 - x0, 1)
+        if target < self.SNAP:
+            target = 0.0
+        elif target > 100.0 - self.SNAP:
+            target = 100.0
         self.value += self.alpha * (target - self.value)
+        if abs(target - self.value) < 0.6:
+            self.value = target
         return self.value
+
+    def set(self, v):
+        self.value = float(max(0, min(100, v)))
+        return self.value
+
+
+class CursorSmoother:
+    """Smooth helper: EMA on fingertip so cursor doesn't shake."""
+
+    def __init__(self, alpha=0.5):
+        self.alpha = alpha
+        self.p = None
+
+    def update(self, tip):
+        if self.p is None:
+            self.p = (float(tip[0]), float(tip[1]))
+        else:
+            self.p = (self.p[0] + self.alpha * (tip[0] - self.p[0]),
+                      self.p[1] + self.alpha * (tip[1] - self.p[1]))
+        return self.p
+
+    def reset(self):
+        self.p = None
 
 
 class Board:
@@ -129,14 +160,26 @@ class Board:
             self.light = not self.light
         elif bid == "door":
             self.door = not self.door
+        elif bid == "open":
+            self.door = True
+        elif bid == "close":
+            self.door = False
         elif bid == "alarm":
             self.alarm = not self.alarm
         elif bid == "count":
             self.count += 1
+        elif bid in ("m10", "m1", "p1", "p10"):
+            self.count = max(0, self.count + {"m10": -10, "m1": -1, "p1": 1, "p10": 10}[bid])
         elif bid == "reset":
             self.__init__()
             return "RESET"
         self.log(bid)
+        if bid in ("m10", "m1", "p1", "p10", "count"):
+            return f"COUNT {self.count}"
+        if bid == "open":
+            return "DOOR OPEN"
+        if bid == "close":
+            return "DOOR CLOSED"
         return f"{bid.upper()} {'ON' if getattr(self, bid, None) is True else ''}".strip()
 
     def log(self, what):
@@ -147,14 +190,21 @@ class Board:
 
 
 BUTTONS = [
-    ("motor", "MOTOR", (0.05, 0.30, 0.30, 0.46)),
-    ("light", "LIGHT", (0.35, 0.30, 0.60, 0.46)),
-    ("door", "DOOR", (0.65, 0.30, 0.90, 0.46)),
-    ("alarm", "ALARM", (0.05, 0.50, 0.30, 0.66)),
-    ("count", "COUNT+1", (0.35, 0.50, 0.60, 0.66)),
-    ("reset", "RESET", (0.65, 0.50, 0.90, 0.66)),
+    ("motor", "MOTOR", (0.05, 0.22, 0.30, 0.34)),
+    ("light", "LIGHT", (0.35, 0.22, 0.60, 0.34)),
+    ("door", "DOOR", (0.65, 0.22, 0.90, 0.34)),
+    ("alarm", "ALARM", (0.05, 0.37, 0.30, 0.49)),
+    ("open", "OPEN", (0.35, 0.37, 0.60, 0.49)),
+    ("close", "CLOSE", (0.65, 0.37, 0.90, 0.49)),
+    ("m10", "-10", (0.02, 0.52, 0.18, 0.62)),
+    ("m1", "-1", (0.20, 0.52, 0.36, 0.62)),
+    ("reset", "RESET", (0.38, 0.52, 0.54, 0.62)),
+    ("p1", "+1", (0.56, 0.52, 0.72, 0.62)),
+    ("p10", "+10", (0.74, 0.52, 0.94, 0.62)),
 ]
-SLIDER_NORM = (0.05, 0.78, 0.90, 0.90)  # SPEED slider strip
+SLIDER_NORM = (0.16, 0.78, 0.74, 0.90)  # SPEED strip (room for 0/100 sides)
+MIN_NORM = (0.02, 0.78, 0.14, 0.90)  # touch = SPEED 0
+MAX_NORM = (0.76, 0.78, 0.93, 0.90)  # touch = SPEED 100
 
 
 def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
@@ -185,6 +235,11 @@ def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
         cv2.rectangle(frame, (X0, Y0), (fx, Y1), (255, 150, 0), -1)
         cv2.putText(frame, f"SPEED {board.speed:.0f}", (X0 + 10, Y0 - 8),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 150, 0), 2)
+        for (rx, label) in ((MIN_NORM, "0"), (MAX_NORM, "100")):
+            BX0, BY0, BX1, BY1 = int(rx[0] * w), int(rx[1] * h), int(rx[2] * w), int(rx[3] * h)
+            cv2.rectangle(frame, (BX0, BY0), (BX1, BY1), (255, 150, 0), 2)
+            cv2.putText(frame, label, (BX0 + 8, BY0 + 40),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 150, 0), 2)
     return frame
 
 
@@ -230,13 +285,27 @@ def selftest():
     assert sl.update((0, 0), (100, 100, 500, 200)) is None
     v = sl.update((300, 150), (100, 100, 500, 200))
     assert v is not None and 0 < v < 100, f"slider follows tip {v}"
-    for _ in range(20):
+    for _ in range(30):
         v = sl.update((500, 150), (100, 100, 500, 200))
-    assert v > 90, f"slider converges right {v}"
+    assert v == 100, f"end snaps exactly 100, got {v}"
+    for _ in range(30):
+        v = sl.update((100, 150), (100, 100, 500, 200))
+    assert v == 0, f"end snaps exactly 0, got {v}"
+    assert sl.set(150) == 100 and sl.set(-5) == 0, "MIN/MAX clamp"
+    cs = CursorSmoother()
+    p1 = cs.update((100, 100))
+    p2 = cs.update((200, 100))
+    assert p1 == (100.0, 100.0) and 100 < p2[0] < 200, f"smoother halves jump {p2}"
+    cs.reset()
+    assert cs.update((50, 50)) == (50.0, 50.0)
     b = Board()
     assert b.toggle("motor") == "MOTOR ON" and b.motor
     assert b.toggle("motor") == "MOTOR" and not b.motor
-    assert b.toggle("count").startswith("COUNT") and b.count == 1
+    assert b.toggle("open") == "DOOR OPEN" and b.door
+    assert b.toggle("close") == "DOOR CLOSED" and not b.door
+    assert b.toggle("p10") == "COUNT 10" and b.count == 10
+    assert b.toggle("m1") == "COUNT 9" and b.count == 9
+    assert b.toggle("m10") == "COUNT 0" and b.count == 0, "clamp at zero"
     print("boxes self-test passed: presence/dwell/slider/toggles")
 
 
@@ -259,7 +328,7 @@ def main():
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         sys.exit("No webcam. Try: uv run python shed.py --test")
-    board, lock, dwell, slider = Board(), PresenceLock(), DwellButton(), Slider()
+    board, lock, dwell, slider, smooth = Board(), PresenceLock(), DwellButton(), Slider(), CursorSmoother()
     print("farm-shed-helper. SHOW PALM to lock, point fingertip at boxes, slider follows tip. q=quit")
     with vision.HandLandmarker.create_from_options(opts) as lm:
         while cap.isOpened():
@@ -276,22 +345,38 @@ def main():
             msg = None
             bpx = [(b, l, (x0 * w, y0 * h, x1 * w, y1 * h)) for (b, l, (x0, y0, x1, y1)) in BUTTONS]
             srect = (SLIDER_NORM[0] * w, SLIDER_NORM[1] * h, SLIDER_NORM[2] * w, SLIDER_NORM[3] * h)
+            minrect = (MIN_NORM[0] * w, MIN_NORM[1] * h, MIN_NORM[2] * w, MIN_NORM[3] * h)
+            maxrect = (MAX_NORM[0] * w, MAX_NORM[1] * h, MAX_NORM[2] * w, MAX_NORM[3] * h)
             if hands:
                 hand = hands[0]
                 pts = [(int(p.x * w), int(p.y * h)) for p in hand]
                 for conn in vision.HandLandmarksConnections.HAND_CONNECTIONS:
                     cv2.line(frame, pts[conn.start], pts[conn.end], (0, 255, 0), 2)
-                tip = (hand[8].x * w, hand[8].y * h)
+                tip = smooth.update((hand[8].x * w, hand[8].y * h))
                 cv2.circle(frame, (int(tip[0]), int(tip[1])), 10, (0, 255, 255), -1)
                 if locked:
-                    v = slider.update(tip, srect)
-                    if v is not None:
-                        board.speed = v
+                    mx0, my0, mx1, my1 = minrect
+                    gx0, gy0, gx1, gy1 = maxrect
+                    if mx0 <= tip[0] <= mx1 and my0 <= tip[1] <= my1:
+                        if board.speed != 0:
+                            board.speed = slider.set(0)
+                            board.log("speed_0")
+                            msg = "SPEED 0"
+                    elif gx0 <= tip[0] <= gx1 and gy0 <= tip[1] <= gy1:
+                        if board.speed != 100:
+                            board.speed = slider.set(100)
+                            board.log("speed_100")
+                            msg = "SPEED 100"
+                    else:
+                        v = slider.update(tip, srect)
+                        if v is not None:
+                            board.speed = v
                     fired = dwell.update(tip, bpx)
                     if fired:
                         msg = board.toggle(fired)
             else:
                 dwell.reset()
+                smooth.reset()
             if msg:
                 print(msg, flush=True)
             cv2.imshow("farm-shed-helper (q quit)", draw(frame, board, locked, bpx, dwell, SLIDER_NORM))
