@@ -9,7 +9,7 @@ import sys
 import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "xcb")  # silence wayland + dejavu font nag
-os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "0")
+os.environ.setdefault("QT_QPA_FONTDIR", "/usr/share/fonts")  # real fonts for bundled Qt
 
 import cv2
 import numpy as np
@@ -450,7 +450,6 @@ def main():
     cap = cv2.VideoCapture(args.cam)
     try:
         rw, rh = args.res.lower().split("x")
-        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(rw))
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(rh))
     except Exception:
