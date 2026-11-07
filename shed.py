@@ -432,7 +432,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--test", action="store_true")
     ap.add_argument("--cam", type=int, default=0, help="camera index (try 1, 2 if 0 glitches)")
-    ap.add_argument("--res", default="640x480", help="capture resolution WxH (default 640x480, safer than 720p)")
+    ap.add_argument("--res", default="1280x720", help="capture resolution WxH (default 1280x720)")
     ap.add_argument("--skip", type=int, default=2, help="detect every Nth frame (perf)")
     args = ap.parse_args()
     if args.test:
