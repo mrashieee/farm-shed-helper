@@ -92,7 +92,7 @@ class PresenceLock:
 
 class DwellButton:
     DWELL_S = 0.6
-    DWELL_MAP = {"reset": 1.2, "freeze": 0.8}  # dangerous boxes need longer hold
+    DWELL_MAP = {"freeze": 0.8}  # freeze needs a deliberate hold
     REFIRE_S = 2.0  # same box can't refire within 2s (edge-jitter spam)
 
     def __init__(self):
@@ -182,63 +182,53 @@ class CursorSmoother:
 
 class Board:
     LOG = "shed_log.csv"
-    HEADER = ["n", "time", "event", "count", "speed", "motor", "light", "door", "alarm"]
+    HEADER = ["time", "event", "speed", "motor", "light", "doors", "alarm"]
 
     def __init__(self):
         self.motor = False
         self.light = False
-        self.door = False
+        self.doors = {d: False for d in DOORS}
+        self.sel = 0
         self.alarm = False
         self.frozen = False
-        self.count = 0
         self.speed = 0.0
-        self.n = 1
-        try:
-            with open(self.LOG) as f:
-                rows = [r for r in f if r.strip()]
-            if rows:
-                try:
-                    self.n = int(rows[-1].split(",")[0]) + 1
-                except ValueError:
-                    self.n = len(rows) + 1  # header present
-        except FileNotFoundError:
-            pass
+
+    @property
+    def door_name(self):
+        return DOORS[self.sel % len(DOORS)]
+
+    @property
+    def door_open(self):
+        return self.doors[self.door_name]
 
     def toggle(self, bid):
         if bid == "motor":
             self.motor = not self.motor
         elif bid == "light":
             self.light = not self.light
-        elif bid == "door":
-            self.door = not self.door
+        elif bid == "doorsel":
+            self.sel = (self.sel + 1) % len(DOORS)
+            self.log(f"sel_{self.door_name}")
+            return f"DOOR: {self.door_name} {'OPEN' if self.door_open else 'SHUT'}"
         elif bid == "open":
-            if self.door:
-                return "OPENED ALREADY"
-            self.door = True
-            self.log("door_open")
-            return "DOOR OPEN"
+            if self.door_open:
+                return f"{self.door_name} OPENED ALREADY"
+            self.doors[self.door_name] = True
+            self.log(f"open_{self.door_name}")
+            return f"{self.door_name} OPEN"
         elif bid == "close":
-            if not self.door:
-                return "CLOSED ALREADY"
-            self.door = False
-            self.log("door_close")
-            return "DOOR CLOSED"
+            if not self.door_open:
+                return f"{self.door_name} CLOSED ALREADY"
+            self.doors[self.door_name] = False
+            self.log(f"close_{self.door_name}")
+            return f"{self.door_name} CLOSED"
         elif bid == "alarm":
             self.alarm = not self.alarm
-        elif bid == "count":
-            self.count += 1
-        elif bid in ("m10", "m1", "p1", "p10"):
-            self.count = max(0, self.count + {"m10": -10, "m1": -1, "p1": 1, "p10": 10}[bid])
-        elif bid == "reset":
-            self.__init__()
-            return "RESET"
         elif bid == "freeze":
             self.frozen = not self.frozen
             self.log("freeze" if self.frozen else "resume")
             return "FROZEN" if self.frozen else "RESUMED"
         self.log(bid)
-        if bid in ("m10", "m1", "p1", "p10", "count"):
-            return f"COUNT {self.count}"
         return f"{bid.upper()} {'ON' if getattr(self, bid, None) is True else ''}".strip()
 
     def log(self, what):
@@ -248,10 +238,10 @@ class Board:
             w = csv.writer(f)
             if new:
                 w.writerow(self.HEADER)
-            w.writerow([self.n, time.strftime("%H:%M:%S"), what, self.count,
+            w.writerow([time.strftime("%H:%M:%S"), what,
                         round(self.speed), self.motor, self.light,
-                        self.door, self.alarm])
-            self.n += 1
+                        "+".join(d for d, o in self.doors.items() if o) or "-",
+                        self.alarm])
 
 
 class SpeedLogger:
@@ -286,17 +276,13 @@ class SpeedLogger:
 BUTTONS = [
     ("motor", "MOTOR", (0.02, 0.13, 0.24, 0.20)),
     ("light", "LIGHT", (0.26, 0.13, 0.48, 0.20)),
-    ("door", "DOOR", (0.50, 0.13, 0.72, 0.20)),
-    ("freeze", "FREEZE", (0.02, 0.22, 0.30, 0.29)),
-    ("alarm", "ALARM", (0.74, 0.13, 0.95, 0.20)),
+    ("alarm", "ALARM", (0.50, 0.13, 0.72, 0.20)),
+    ("freeze", "FREEZE", (0.74, 0.13, 0.95, 0.20)),
+    ("doorsel", "DOOR", (0.02, 0.22, 0.30, 0.29)),
     ("open", "OPEN", (0.35, 0.22, 0.60, 0.29)),
     ("close", "CLOSE", (0.65, 0.22, 0.93, 0.29)),
-    ("m10", "-10", (0.02, 0.31, 0.18, 0.38)),
-    ("m1", "-1", (0.20, 0.31, 0.36, 0.38)),
-    ("reset", "RESET", (0.38, 0.31, 0.54, 0.38)),
-    ("p1", "+1", (0.56, 0.31, 0.72, 0.38)),
-    ("p10", "+10", (0.74, 0.31, 0.94, 0.38)),
 ]
+DOORS = ["MAIN", "KITCHEN", "SHED"]
 SLIDER_NORM = (0.16, 0.86, 0.74, 0.93)  # SPEED strip (room for 0/100 sides)
 MIN_NORM = (0.02, 0.86, 0.14, 0.93)  # touch = SPEED 0
 MAX_NORM = (0.76, 0.86, 0.93, 0.93)  # touch = SPEED 100
@@ -306,8 +292,8 @@ def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
     h, w, _ = frame.shape
     cv2.rectangle(frame, (0, 0), (w, 72), (20, 20, 20), -1)
     cv2.putText(frame, f"{'FROZEN' if board.frozen else ('LOCKED' if lock else 'SHOW PALM')}  "
-                       f"M:{int(board.motor)} L:{int(board.light)} D:{int(board.door)} "
-                       f"A:{int(board.alarm)} N:{board.count} SPD:{board.speed:.0f}",
+                       f"M:{int(board.motor)} L:{int(board.light)} {board.door_name}:{'O' if board.door_open else 'S'} "
+                       f"A:{int(board.alarm)} SPD:{board.speed:.0f}",
                 (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 255) if board.frozen else ((0, 255, 0) if lock else (0, 165, 255)), 2)
     cv2.putText(frame, "dwell box | FREEZE to lock input | slider follows tip | q=quit",
                 (10, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
@@ -320,12 +306,21 @@ def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
         for (bid, label, (x0, y0, x1, y1)) in buttons:
             X0, Y0, X1, Y1 = int(x0), int(y0), int(x1), int(y1)  # already pixels
             on = (board.__dict__.get(bid) is True or (bid == "freeze" and board.frozen)
-                  or (bid == "open" and board.door) or (bid == "close" and not board.door))
+                  or (bid == "open" and board.door_open) or (bid == "close" and not board.door_open)
+                  or (bid == "doorsel" and board.door_open))
             hot = dwell is not None and dwell.cur == bid
             col = (0, 255, 0) if on else ((0, 255, 255) if hot else (255, 255, 255))
             cv2.rectangle(frame, (X0, Y0), (X1, Y1), col, 2)
-            fs = 0.55 if len(label) <= 3 else 0.7
-            cv2.putText(frame, f"{label} {'ON' if on else ''}", (X0 + 6, Y0 + 24),
+            if bid in ("motor", "light", "alarm"):
+                txt = f"{label} {'ON' if on else ''}"
+            elif bid == "freeze":
+                txt = "FROZEN" if board.frozen else "FREEZE"
+            elif bid == "doorsel":
+                txt = f"{board.door_name}:{'OPEN' if board.door_open else 'SHUT'}"
+            else:
+                txt = label
+            fs = 0.55 if len(txt) <= 3 else 0.7
+            cv2.putText(frame, txt, (X0 + 6, Y0 + 24),
                         cv2.FONT_HERSHEY_SIMPLEX, fs, (0, 255, 255), 2)
             if hot and dwell is not None:
                 p = min(1.0, dwell.progress())
@@ -411,11 +406,14 @@ def selftest():
     b = Board()
     assert b.toggle("motor") == "MOTOR ON" and b.motor
     assert b.toggle("motor") == "MOTOR" and not b.motor
-    assert b.toggle("open") == "DOOR OPEN" and b.door
-    assert b.toggle("close") == "DOOR CLOSED" and not b.door
-    assert b.toggle("p10") == "COUNT 10" and b.count == 10
-    assert b.toggle("m1") == "COUNT 9" and b.count == 9
-    assert b.toggle("m10") == "COUNT 0" and b.count == 0, "clamp at zero"
+    assert b.toggle("open") == "MAIN OPEN" and b.door_open
+    assert b.toggle("close") == "MAIN CLOSED" and not b.door_open
+    assert b.toggle("alarm") == "ALARM ON" and b.alarm
+    assert b.toggle("doorsel") == "DOOR: KITCHEN SHUT" and b.door_name == "KITCHEN"
+    assert b.toggle("open") == "KITCHEN OPEN" and b.doors["KITCHEN"]
+    assert b.toggle("doorsel") == "DOOR: SHED SHUT"
+    assert b.toggle("doorsel") == "DOOR: MAIN SHUT", "cycles MAIN->KITCHEN->SHED->MAIN"
+    assert b.doors["KITCHEN"] and not b.doors["MAIN"], "per-door state kept"
     fp = FistPause()
     for _ in range(11):
         assert fp.update(True) is None, "needs 12 steady fist frames"
@@ -433,11 +431,11 @@ def selftest():
     assert b2.toggle("freeze") == "FROZEN" and b2.frozen
     assert b2.toggle("freeze") == "RESUMED" and not b2.frozen
     b3 = Board()
-    assert b3.toggle("close") == "CLOSED ALREADY" and not b3.door
-    assert b3.toggle("open") == "DOOR OPEN" and b3.door
-    assert b3.toggle("open") == "OPENED ALREADY" and b3.door
-    assert b3.toggle("close") == "DOOR CLOSED" and not b3.door
-    assert b3.toggle("close") == "CLOSED ALREADY" and not b3.door
+    assert b3.toggle("close") == "MAIN CLOSED ALREADY" and not b3.door_open
+    assert b3.toggle("open") == "MAIN OPEN" and b3.door_open
+    assert b3.toggle("open") == "MAIN OPENED ALREADY" and b3.door_open
+    assert b3.toggle("close") == "MAIN CLOSED" and not b3.door_open
+    assert b3.toggle("close") == "MAIN CLOSED ALREADY" and not b3.door_open
     import os
     Board.LOG = "/tmp/opencode/test_log.csv"
     try:
@@ -445,16 +443,13 @@ def selftest():
     except FileNotFoundError:
         pass
     bn = Board()
-    assert bn.n == 1
     bn.toggle("motor")
-    bn.toggle("p10")
+    bn.toggle("light")
     with open(Board.LOG) as f:
         rows = [r.strip() for r in f if r.strip()]
-    assert rows[0] == "n,time,event,count,speed,motor,light,door,alarm", rows[0]
-    assert rows[1].startswith("1,") and ",motor," in rows[1], rows[1]
-    assert rows[2].startswith("2,") and rows[2].split(",")[3] == "10", rows[2]
-    bn2 = Board()
-    assert bn2.n == 3, "serial continues across restarts"
+    assert rows[0] == "time,event,speed,motor,light,doors,alarm", rows[0]
+    assert ",motor," in rows[1], rows[1]
+    assert ",light," in rows[2], rows[2]
     sl2 = SpeedLogger()
     t3 = time.time()
     assert sl2.note(40, now=t3) is None
@@ -467,11 +462,10 @@ def selftest():
     Board.LOG = "shed_log.csv"
     db3 = DwellButton()
     t2 = time.time()
-    db3.update((200, 200), box, now=t2)
-    box_r = [("reset", "RESET", (100, 100, 300, 300))]
-    db3.update((200, 200), box_r, now=t2)
-    assert db3.update((200, 200), box_r, now=t2 + 0.7) is None, "reset needs 1.2s hold"
-    assert db3.update((200, 200), box_r, now=t2 + 1.3) == "reset"
+    box_f = [("freeze", "FREEZE", (100, 100, 300, 300))]
+    db3.update((200, 200), box_f, now=t2)
+    assert db3.update((200, 200), box_f, now=t2 + 0.7) is None, "freeze needs 0.8s hold"
+    assert db3.update((200, 200), box_f, now=t2 + 0.9) == "freeze"
     print("boxes self-test passed: presence/dwell/slider/toggles/fistpause")
 
 
@@ -578,12 +572,10 @@ def main():
                             settled = spdlog.note(v)
                             if settled is not None:
                                 board.log(f"speed_{settled}")
-                                msg = f"SPEED {settled} (#{board.n - 1})"
+                                msg = f"SPEED {settled}"
                     fired = dwell.update(tip, bpx)
                     if fired:
                         msg = board.toggle(fired)
-                        if fired != "freeze":
-                            msg = f"{msg} (#{board.n - 1})"
             else:
                 dwell.reset()
                 smooth.reset()
