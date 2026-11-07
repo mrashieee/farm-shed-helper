@@ -181,6 +181,9 @@ class CursorSmoother:
 
 
 class Board:
+    LOG = "shed_log.csv"
+    HEADER = ["n", "time", "event", "count", "speed", "motor", "light", "door", "alarm"]
+
     def __init__(self):
         self.motor = False
         self.light = False
@@ -189,6 +192,17 @@ class Board:
         self.frozen = False
         self.count = 0
         self.speed = 0.0
+        self.n = 1
+        try:
+            with open(self.LOG) as f:
+                rows = [r for r in f if r.strip()]
+            if rows:
+                try:
+                    self.n = int(rows[-1].split(",")[0]) + 1
+                except ValueError:
+                    self.n = len(rows) + 1  # header present
+        except FileNotFoundError:
+            pass
 
     def toggle(self, bid):
         if bid == "motor":
@@ -228,10 +242,45 @@ class Board:
         return f"{bid.upper()} {'ON' if getattr(self, bid, None) is True else ''}".strip()
 
     def log(self, what):
-        with open("shed_log.csv", "a", newline="") as f:
-            csv.writer(f).writerow([time.strftime("%H:%M:%S"), what, self.count,
-                                    round(self.speed), self.motor, self.light,
-                                    self.door, self.alarm])
+        import os
+        new = not os.path.exists(self.LOG) or os.path.getsize(self.LOG) == 0
+        with open(self.LOG, "a", newline="") as f:
+            w = csv.writer(f)
+            if new:
+                w.writerow(self.HEADER)
+            w.writerow([self.n, time.strftime("%H:%M:%S"), what, self.count,
+                        round(self.speed), self.motor, self.light,
+                        self.door, self.alarm])
+            self.n += 1
+
+
+class SpeedLogger:
+    """Logs speed only once it settles (1.5s unchanged, moved >=1). No per-frame spam."""
+
+    SETTLE_S = 1.5
+
+    def __init__(self):
+        self.pending = None
+        self.changed_at = 0.0
+        self.last_logged = None
+
+    def note(self, value, now=None):
+        now = time.time() if now is None else now
+        value = round(float(value))
+        if self.last_logged is not None and value == self.last_logged and self.pending is None:
+            return None
+        if self.pending is None or value != self.pending:
+            self.pending, self.changed_at = value, now
+        if now - self.changed_at >= self.SETTLE_S and value != self.last_logged:
+            self.pending = None
+            self.last_logged = value
+            return value
+        return None
+
+    def mark(self, value):
+        """Instant logs (MIN/MAX buttons) suppress a settled duplicate."""
+        self.last_logged = round(float(value))
+        self.pending = None
 
 
 BUTTONS = [
@@ -389,6 +438,33 @@ def selftest():
     assert b3.toggle("open") == "OPENED ALREADY" and b3.door
     assert b3.toggle("close") == "DOOR CLOSED" and not b3.door
     assert b3.toggle("close") == "CLOSED ALREADY" and not b3.door
+    import os
+    Board.LOG = "/tmp/opencode/test_log.csv"
+    try:
+        os.remove(Board.LOG)
+    except FileNotFoundError:
+        pass
+    bn = Board()
+    assert bn.n == 1
+    bn.toggle("motor")
+    bn.toggle("p10")
+    with open(Board.LOG) as f:
+        rows = [r.strip() for r in f if r.strip()]
+    assert rows[0] == "n,time,event,count,speed,motor,light,door,alarm", rows[0]
+    assert rows[1].startswith("1,") and ",motor," in rows[1], rows[1]
+    assert rows[2].startswith("2,") and rows[2].split(",")[3] == "10", rows[2]
+    bn2 = Board()
+    assert bn2.n == 3, "serial continues across restarts"
+    sl2 = SpeedLogger()
+    t3 = time.time()
+    assert sl2.note(40, now=t3) is None
+    assert sl2.note(42, now=t3 + 0.2) is None
+    assert sl2.note(42, now=t3 + 1.0) is None, "not settled yet"
+    assert sl2.note(42, now=t3 + 1.8) == 42, "one row when settled"
+    assert sl2.note(42, now=t3 + 5.0) is None, "no duplicate"
+    sl2.mark(100)
+    assert sl2.note(100, now=t3 + 9.0) is None, "instant MIN/MAX suppresses duplicate"
+    Board.LOG = "shed_log.csv"
     db3 = DwellButton()
     t2 = time.time()
     db3.update((200, 200), box, now=t2)
@@ -435,7 +511,7 @@ def main():
         print(f"camera {args.cam} running at {pw}x{ph}")
     else:
         print(f"camera {args.cam} opened but no frames (try --cam 2)")
-    board, lock, dwell, slider, smooth = Board(), PresenceLock(), DwellButton(), Slider(), CursorSmoother()
+    board, lock, dwell, slider, smooth, spdlog = Board(), PresenceLock(), DwellButton(), Slider(), CursorSmoother(), SpeedLogger()
     print("farm-shed-helper. SHOW PALM to lock, point fingertip at boxes, slider follows tip. q=quit")
     cv2.namedWindow("farm-shed-helper (q quit)", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("farm-shed-helper (q quit)", 1280, 720)
@@ -487,19 +563,27 @@ def main():
                         if board.speed != 0:
                             board.speed = slider.set(0)
                             board.log("speed_0")
+                            spdlog.mark(0)
                             msg = "SPEED 0"
                     elif gx0 <= tip[0] <= gx1 and gy0 <= tip[1] <= gy1:
                         if board.speed != 100:
                             board.speed = slider.set(100)
                             board.log("speed_100")
+                            spdlog.mark(100)
                             msg = "SPEED 100"
                     else:
                         v = slider.update(tip, srect)
                         if v is not None:
                             board.speed = v
+                            settled = spdlog.note(v)
+                            if settled is not None:
+                                board.log(f"speed_{settled}")
+                                msg = f"SPEED {settled} (#{board.n - 1})"
                     fired = dwell.update(tip, bpx)
                     if fired:
                         msg = board.toggle(fired)
+                        if fired != "freeze":
+                            msg = f"{msg} (#{board.n - 1})"
             else:
                 dwell.reset()
                 smooth.reset()
