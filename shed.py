@@ -318,7 +318,8 @@ def selftest():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--test", action="store_true")
-    ap.add_argument("--cam", type=int, default=0, help="camera index (try 1 if 0 glitches)")
+    ap.add_argument("--cam", type=int, default=0, help="camera index (try 1, 2 if 0 glitches)")
+    ap.add_argument("--res", default="640x480", help="capture resolution WxH (default 640x480, safer than 720p)")
     ap.add_argument("--skip", type=int, default=2, help="detect every Nth frame (perf)")
     args = ap.parse_args()
     if args.test:
@@ -334,11 +335,22 @@ def main():
         running_mode=vision.RunningMode.VIDEO, num_hands=1,
         min_hand_detection_confidence=0.4, min_hand_presence_confidence=0.4)
     cap = cv2.VideoCapture(args.cam)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    try:
+        rw, rh = args.res.lower().split("x")
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(rw))
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(rh))
+    except Exception:
+        pass
     cap.set(cv2.CAP_PROP_FPS, 30)
     if not cap.isOpened():
         sys.exit(f"No webcam {args.cam}. Try: uv run python shed.py --cam 1")
+    ok, probe = cap.read()
+    if ok:
+        ph, pw, _ = probe.shape
+        print(f"camera {args.cam} running at {pw}x{ph}")
+    else:
+        print(f"camera {args.cam} opened but no frames (try --cam 2)")
     board, lock, dwell, slider, smooth = Board(), PresenceLock(), DwellButton(), Slider(), CursorSmoother()
     print("farm-shed-helper. SHOW PALM to lock, point fingertip at boxes, slider follows tip. q=quit")
     cv2.namedWindow("farm-shed-helper (q quit)", cv2.WINDOW_NORMAL)
