@@ -6,7 +6,7 @@ Touchless farm-shed dashboard for muddy/gloved hands. Show palm to lock, point y
 
 ### 🌐 Check it out!
 - **Live Website:** N/A
-- **GitHub Repo:** https://github.com/mrashieee/nira
+- **GitHub Repo:** https://github.com/mrashieee/farm-shed-helper
 
 ### 🛠️ What did you use?
 - Python 3.11 + `uv` (`uv run`)
