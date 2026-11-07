@@ -64,11 +64,13 @@ class PresenceLock:
 
 class DwellButton:
     DWELL_S = 0.6
+    REFIRE_S = 2.0  # same box can't refire within 2s (edge-jitter spam)
 
     def __init__(self):
         self.cur = None
         self.enter = 0.0
         self.armed = True
+        self.cool = {}
 
     def update(self, tip, buttons_px, now=None):
         now = time.time() if now is None else now
@@ -82,8 +84,11 @@ class DwellButton:
             return None
         if hit is None or not self.armed:
             return None
+        if now < self.cool.get(hit, 0):
+            return None
         if now - self.enter >= self.DWELL_S:
             self.armed = False
+            self.cool[hit] = now + self.REFIRE_S
             return hit
         return None
 
@@ -236,16 +241,23 @@ def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
                 cv2.rectangle(frame, (X0, Y1 - 10), (int(X0 + (X1 - X0) * p), Y1 - 4), (0, 255, 0), -1)
     if slider_rect:
         X0, Y0, X1, Y1 = [int(v * (w if i % 2 == 0 else h)) for i, v in enumerate(slider_rect)]
-        cv2.rectangle(frame, (X0, Y0), (X1, Y1), (90, 90, 90), 2)
+        mid = (Y0 + Y1) // 2
+        cv2.rectangle(frame, (X0, mid - 3), (X1, mid + 3), (120, 120, 120), -1)
         fx = int(X0 + (X1 - X0) * board.speed / 100.0)
-        cv2.rectangle(frame, (X0, Y0), (fx, Y1), (255, 150, 0), -1)
-        cv2.putText(frame, f"SPEED {board.speed:.0f}", (X0 + 10, Y0 - 8),
+        cv2.rectangle(frame, (X0, mid - 3), (fx, mid + 3), (255, 150, 0), -1)
+        cv2.circle(frame, (fx, mid), 13, (255, 150, 0), -1)
+        cv2.circle(frame, (fx, mid), 13, (255, 255, 255), 2)
+        for t in (0, 25, 50, 75, 100):
+            tx = int(X0 + (X1 - X0) * t / 100.0)
+            cv2.line(frame, (tx, Y1 - 2), (tx, Y1 + 5), (160, 160, 160), 1)
+        cv2.putText(frame, f"SPEED {board.speed:.0f}", (X0, Y0 - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 150, 0), 2)
         for (rx, label) in ((MIN_NORM, "0"), (MAX_NORM, "100")):
             BX0, BY0, BX1, BY1 = int(rx[0] * w), int(rx[1] * h), int(rx[2] * w), int(rx[3] * h)
+            cv2.rectangle(frame, (BX0, BY0), (BX1, BY1), (40, 40, 40), -1)
             cv2.rectangle(frame, (BX0, BY0), (BX1, BY1), (255, 150, 0), 2)
-            cv2.putText(frame, label, (BX0 + 8, BY0 + 40),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 150, 0), 2)
+            cv2.putText(frame, label, (BX0 + 10, (BY0 + BY1) // 2 + 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 150, 0), 2)
     return frame
 
 
@@ -286,7 +298,8 @@ def selftest():
     assert db.update((200, 200), box, now=t0 + 1.2) is None
     assert db.update((10, 10), box, now=t0 + 1.3) is None
     assert db.update((200, 200), box, now=t0 + 1.4) is None
-    assert db.update((200, 200), box, now=t0 + 2.1) == "motor"
+    assert db.update((200, 200), box, now=t0 + 2.1) is None, "2s refire cooldown blocks jitter"
+    assert db.update((200, 200), box, now=t0 + 3.0) == "motor", "fires after cooldown"
     sl = Slider()
     assert sl.update((0, 0), (100, 100, 500, 200)) is None
     v = sl.update((300, 150), (100, 100, 500, 200))
@@ -359,8 +372,10 @@ def main():
     with vision.HandLandmarker.create_from_options(opts) as lm:
         while cap.isOpened():
             ok, frame = cap.read()
-            if not ok:
+            if not ok or frame is None or frame.size == 0:
                 continue
+            if frame.shape[0] < 100 or frame.shape[1] < 100:
+                continue  # corrupt partial JPEG frame
             frame = cv2.flip(frame, 1)
             h, w, _ = frame.shape
             frame_no += 1
