@@ -242,16 +242,17 @@ MIN_NORM = (0.02, 0.86, 0.14, 0.93)  # touch = SPEED 0
 MAX_NORM = (0.76, 0.86, 0.93, 0.93)  # touch = SPEED 100
 
 
-def fit_label(frame, txt, box, color, thick=2):
-    """Draw text centered in box, auto-shrunk to fit. Returns scale used."""
+def fit_label(frame, txt, box, color, thick=2, floor=0.6):
+    """Draw text centered in box, shrunk to fit but never below floor."""
     X0, Y0, X1, Y1 = box
     bw, bh = max(X1 - X0 - 16, 10), max(Y1 - Y0 - 12, 10)
-    fs = 1.0
-    while fs > 0.3:
+    fs = 0.9
+    while fs > floor:
         (tw, th), _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, fs, thick)
         if tw <= bw and th <= bh:
             break
-        fs -= 0.1
+        fs = round(fs - 0.1, 1)
+    fs = max(fs, floor)
     (tw, th), _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, fs, thick)
     cv2.putText(frame, txt, (X0 + (X1 - X0 - tw) // 2, Y0 + (Y1 - Y0 + th) // 2),
                 cv2.FONT_HERSHEY_SIMPLEX, fs, color, thick)
@@ -260,13 +261,13 @@ def fit_label(frame, txt, box, color, thick=2):
 
 def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
     h, w, _ = frame.shape
-    cv2.rectangle(frame, (0, 0), (w, 72), (20, 20, 20), -1)
-    cv2.putText(frame, f"{'FROZEN' if board.frozen else ('LOCKED' if lock else 'SHOW PALM')}  "
-                       f"M:{int(board.motor)} L:{int(board.light)} W:{int(board.sprinkler)} {board.door_name}:{'O' if board.door_open else 'S'} "
-                       f"A:{int(board.alarm)} SPD:{board.speed:.0f}",
-                (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 255) if board.frozen else ((0, 255, 0) if lock else (0, 165, 255)), 2)
-    cv2.putText(frame, "dwell box | FREEZE to lock input | slider follows tip | q=quit",
-                (10, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
+    state = "FROZEN" if board.frozen else ("LOCKED" if lock else "SHOW PALM")
+    scol = (0, 0, 255) if board.frozen else ((0, 255, 0) if lock else (0, 165, 255))
+    cv2.rectangle(frame, (0, 0), (w, 52), (20, 20, 20), -1)
+    cv2.putText(frame, f"{state}   SPD:{board.speed:.0f}", (10, 22),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.65, scol, 2)
+    cv2.putText(frame, "dwell a box | q=quit", (10, 44),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
     if buttons:
         overlay = frame.copy()
         for (bid, label, (x0, y0, x1, y1)) in buttons:
