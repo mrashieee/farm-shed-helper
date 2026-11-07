@@ -40,6 +40,33 @@ def pinch_px(lms, w, h):
     return float(np.linalg.norm(a - b))
 
 
+class FistPause:
+    """Fist = kill-switch. Hold fist ~8 frames to freeze/unfreeze everything."""
+
+    NEED = 8
+
+    def __init__(self):
+        self.n = 0
+        self.paused = False
+        self.armed = True
+
+    def update(self, is_fist):
+        if not is_fist:
+            self.n = 0
+            self.armed = True
+            return None
+        self.n += 1
+        if self.n >= self.NEED and self.armed:
+            self.armed = False
+            self.paused = not self.paused
+            return "paused" if self.paused else "resumed"
+        return None
+
+    def reset(self):
+        self.n = 0
+        self.armed = True
+
+
 class PresenceLock:
     """Palm lock-in: needs N consecutive frames with hand to lock, M missing to drop."""
 
@@ -325,7 +352,16 @@ def selftest():
     assert b.toggle("p10") == "COUNT 10" and b.count == 10
     assert b.toggle("m1") == "COUNT 9" and b.count == 9
     assert b.toggle("m10") == "COUNT 0" and b.count == 0, "clamp at zero"
-    print("boxes self-test passed: presence/dwell/slider/toggles")
+    fp = FistPause()
+    for _ in range(7):
+        assert fp.update(True) is None, "needs 8 steady fist frames"
+    assert fp.update(True) == "paused" and fp.paused
+    assert fp.update(True) is None, "holding fist doesn't re-toggle"
+    assert fp.update(False) is None, "release re-arms"
+    for _ in range(7):
+        assert fp.update(True) is None
+    assert fp.update(True) == "resumed" and not fp.paused
+    print("boxes self-test passed: presence/dwell/slider/toggles/fistpause")
 
 
 def main():
@@ -364,7 +400,7 @@ def main():
         print(f"camera {args.cam} running at {pw}x{ph}")
     else:
         print(f"camera {args.cam} opened but no frames (try --cam 2)")
-    board, lock, dwell, slider, smooth = Board(), PresenceLock(), DwellButton(), Slider(), CursorSmoother()
+    board, lock, dwell, slider, smooth, fp = Board(), PresenceLock(), DwellButton(), Slider(), CursorSmoother(), FistPause()
     print("farm-shed-helper. SHOW PALM to lock, point fingertip at boxes, slider follows tip. q=quit")
     cv2.namedWindow("farm-shed-helper (q quit)", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("farm-shed-helper (q quit)", 1280, 720)
@@ -401,9 +437,24 @@ def main():
                 pts = [(int(p.x * w), int(p.y * h)) for p in hand]
                 for conn in vision.HandLandmarksConnections.HAND_CONNECTIONS:
                     cv2.line(frame, pts[conn.start], pts[conn.end], (0, 255, 0), 2)
+                fist_now = is_fist(hand)
+                fp_msg = fp.update(fist_now)
+                if fp_msg == "paused":
+                    msg, dwell_keep = "FROZEN - open hand to resume", True
+                    dwell.reset()
+                elif fp_msg == "resumed":
+                    msg, dwell_keep = "RESUMED", True
+                elif fp.paused:
+                    msg, dwell_keep = None, True  # frozen: ignore everything
+                else:
+                    dwell_keep = False
                 tip = smooth.update((hand[8].x * w, hand[8].y * h))
-                cv2.circle(frame, (int(tip[0]), int(tip[1])), 10, (0, 255, 255), -1)
-                if locked:
+                if not fp.paused:
+                    cv2.circle(frame, (int(tip[0]), int(tip[1])), 10, (0, 255, 255), -1)
+                else:
+                    cv2.putText(frame, "FROZEN - hold FIST to resume", (w // 2 - 260, h // 2),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
+                if locked and not fp.paused and not dwell_keep and not fist_now:
                     mx0, my0, mx1, my1 = minrect
                     gx0, gy0, gx1, gy1 = maxrect
                     if mx0 <= tip[0] <= mx1 and my0 <= tip[1] <= my1:
@@ -426,6 +477,7 @@ def main():
             else:
                 dwell.reset()
                 smooth.reset()
+                fp.reset()
             if msg:
                 print(msg, flush=True)
             cv2.imshow("farm-shed-helper (q quit)", draw(frame, board, locked, bpx, dwell, SLIDER_NORM))
