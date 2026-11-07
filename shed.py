@@ -183,6 +183,7 @@ class Board:
     def __init__(self):
         self.motor = False
         self.light = False
+        self.sprinkler = False
         self.doors = {d: False for d in DOORS}
         self.sel = 0
         self.alarm = False
@@ -200,6 +201,8 @@ class Board:
     def toggle(self, bid):
         if bid == "motor":
             self.motor = not self.motor
+        elif bid == "sprinkler":
+            self.sprinkler = not self.sprinkler
         elif bid == "light":
             self.light = not self.light
         elif bid == "doorsel":
@@ -228,9 +231,10 @@ BUTTONS = [
     ("light", "LIGHT", (0.26, 0.13, 0.48, 0.20)),
     ("alarm", "ALARM", (0.50, 0.13, 0.72, 0.20)),
     ("freeze", "FREEZE", (0.74, 0.13, 0.95, 0.20)),
-    ("doorsel", "DOOR", (0.02, 0.22, 0.30, 0.29)),
-    ("open", "OPEN", (0.35, 0.22, 0.60, 0.29)),
-    ("close", "CLOSE", (0.65, 0.22, 0.93, 0.29)),
+    ("doorsel", "DOOR", (0.02, 0.22, 0.24, 0.29)),
+    ("open", "OPEN", (0.26, 0.22, 0.48, 0.29)),
+    ("close", "CLOSE", (0.50, 0.22, 0.72, 0.29)),
+    ("sprinkler", "SPRINKLER", (0.74, 0.22, 0.95, 0.29)),
 ]
 DOORS = ["MAIN", "KITCHEN", "SHED"]
 SLIDER_NORM = (0.16, 0.86, 0.74, 0.93)  # SPEED strip (room for 0/100 sides)
@@ -242,7 +246,7 @@ def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
     h, w, _ = frame.shape
     cv2.rectangle(frame, (0, 0), (w, 72), (20, 20, 20), -1)
     cv2.putText(frame, f"{'FROZEN' if board.frozen else ('LOCKED' if lock else 'SHOW PALM')}  "
-                       f"M:{int(board.motor)} L:{int(board.light)} {board.door_name}:{'O' if board.door_open else 'S'} "
+                       f"M:{int(board.motor)} L:{int(board.light)} W:{int(board.sprinkler)} {board.door_name}:{'O' if board.door_open else 'S'} "
                        f"A:{int(board.alarm)} SPD:{board.speed:.0f}",
                 (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 255) if board.frozen else ((0, 255, 0) if lock else (0, 165, 255)), 2)
     cv2.putText(frame, "dwell box | FREEZE to lock input | slider follows tip | q=quit",
@@ -261,7 +265,7 @@ def draw(frame, board, lock, buttons=None, dwell=None, slider_rect=None):
             hot = dwell is not None and dwell.cur == bid
             col = (0, 255, 0) if on else ((0, 255, 255) if hot else (255, 255, 255))
             cv2.rectangle(frame, (X0, Y0), (X1, Y1), col, 2)
-            if bid in ("motor", "light", "alarm"):
+            if bid in ("motor", "light", "alarm", "sprinkler"):
                 txt = f"{label} {'ON' if on else ''}"
             elif bid == "freeze":
                 txt = "FROZEN" if board.frozen else "FREEZE"
@@ -380,6 +384,8 @@ def selftest():
     b2 = Board()
     assert b2.toggle("freeze") == "FROZEN" and b2.frozen
     assert b2.toggle("freeze") == "RESUMED" and not b2.frozen
+    assert b2.toggle("sprinkler") == "SPRINKLER ON" and b2.sprinkler
+    assert b2.toggle("sprinkler") == "SPRINKLER" and not b2.sprinkler
     b3 = Board()
     assert b3.toggle("close") == "MAIN CLOSED ALREADY" and not b3.door_open
     assert b3.toggle("open") == "MAIN OPEN" and b3.door_open
