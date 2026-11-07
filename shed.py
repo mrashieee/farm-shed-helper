@@ -450,6 +450,10 @@ def main():
     cap = cv2.VideoCapture(args.cam)
     try:
         rw, rh = args.res.lower().split("x")
+        try:
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        except Exception:
+            pass  # loopback/virtual cams may not take MJPG; driver default stands
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(rw))
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(rh))
     except Exception:
