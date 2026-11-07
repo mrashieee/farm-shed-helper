@@ -1,8 +1,8 @@
-# Nira
+# farm-shed-helper
 ![Project Cover](assets/cover.jpeg)
 
 ### 💡 What's the idea?
-Touchless vegetable checker for small vendors and kitchens. Point webcam at vegetables, get live ripeness and freshness score with Grade A / B / Reject badge. Control it with hand gestures — built for dirty mandis and kitchens. 100% on-device, works with no internet.
+Touchless farm-shed dashboard for muddy/gloved hands. Show palm to lock, point your index fingertip at on-screen boxes to toggle MOTOR / LIGHT / DOOR / ALARM, COUNT sacks, and drag a SPEED slider — no touching, no pose passwords. 100% on-device MediaPipe hand tracking. Built for sheds where touchscreens die.
 
 ### 🌐 Check it out!
 - **Live Website:** N/A
@@ -10,29 +10,29 @@ Touchless vegetable checker for small vendors and kitchens. Point webcam at vege
 
 ### 🛠️ What did you use?
 - Python 3.11 + `uv` (`uv run`)
-- OpenCV 5.0 (`opencv-python`), NumPy
+- OpenCV 5.0, NumPy
 - MediaPipe 1.2.2 Tasks API — `HandLandmarker` (`hand_landmarker.task`)
-- HSV color masks + contour area for grading
+- Fingertip position only: presence lock + dwell buttons + follow slider (no gesture classification)
 
 ### 👥 The Humans Behind It
 - Muhammad Rashid K – mrashieee
 
 ### ⚙️ Hardware Corner
-- Laptop webcam (no webcam in container, tested via image/file mode)
-- White paper for one-click color calibration, optional desk lamp lightbox
+- Laptop webcam. No extra hardware. (Relay/Pi wiring = future.)
 
 ### 📸 Show Us What You Built!
-[Add screenshots, photos, GIFs or demo video links here.]
+[Add screenshots, demo video link here.]
 
 ### ✨ Cool Things It Does
-- Live ripeness + freshness % with HSV color ratios (lighting-stable)
-- `c` to calibrate, hand gestures to control + save to CSV log
-- Hand-as-scale for size estimate + fully touchless UI
-- Honest limitation: controlled light prototype, HSV presets not lab-grade
+- Palm lock-in (3 frames to lock, 5 to drop) — flicker never triggers
+- 6 dwell boxes (0.6s) + SPEED slider that follows your fingertip
+- Every toggle logged to `shed_log.csv`
+- No cloud, works offline in the shed
 
 ### ▶️ Run it
 ```bash
-uv run python app.py
+uv run python shed.py --test   # self-test, no webcam
+uv run python shed.py          # live: SHOW PALM, point at boxes
 ```
 
 ---
