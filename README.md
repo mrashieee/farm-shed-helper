@@ -2,7 +2,7 @@
 ![Project Cover](assets/cover.jpeg)
 
 ### 💡 What's the idea?
-Touchless farm-shed dashboard for muddy/gloved hands. Show palm to lock, point your index fingertip at on-screen boxes to toggle MOTOR / LIGHT / DOOR / ALARM, COUNT sacks, and drag a SPEED slider — no touching, no pose passwords. 100% on-device MediaPipe hand tracking. Built for sheds where touchscreens die.
+Touchless farm-shed dashboard for muddy/gloved hands. Show palm to lock, point your index fingertip at on-screen boxes to toggle MOTOR / LIGHT / ALARM, pick a door (MAIN/KITCHEN/SHED) and OPEN/CLOSE it, and drag a SPEED slider — no touching. 100% on-device MediaPipe hand tracking. Built for sheds where touchscreens die.
 
 ### 🌐 Check it out!
 - **Live Website:** N/A
@@ -27,7 +27,6 @@ Touchless farm-shed dashboard for muddy/gloved hands. Show palm to lock, point y
 - Palm lock-in (3 frames to lock, 5 to drop) — flicker never triggers
 - Boxes: MOTOR / LIGHT / ALARM / FREEZE, door selector (MAIN/KITCHEN/SHED) + OPEN / CLOSE
 - SPEED slider with 0 / 100 side buttons
-- Every toggle logged to `shed_log.csv`
 - No cloud, works offline in the shed
 
 ### ▶️ Run it
